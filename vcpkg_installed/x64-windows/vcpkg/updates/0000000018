@@ -1,0 +1,8 @@
+Package: minizip
+Version: 1.3.1
+Depends: vcpkg-cmake, vcpkg-cmake-config, vcpkg-cmake-get-vars, zlib
+Architecture: x64-windows
+Multi-Arch: same
+Abi: 22b978caf054cec05069b3ca7c35b7732ba1cdc525d3e2be979c85caea5ad648
+Description: Minizip zip file manipulation library
+Status: install ok half-installed
