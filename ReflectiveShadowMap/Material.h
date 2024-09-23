@@ -3,6 +3,5 @@
 
 
 struct Diffuse {
-  DirectX::XMFLOAT3 albedo;
-  float reflectance = 0.8;
+  DirectX::XMFLOAT3 albedo = {0.8f, 0.8f, 0.8f};
 };

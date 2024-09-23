@@ -54,3 +54,14 @@ std::tuple<float, float, float> ToSpherical(float x, float y, float z) {
   float theta = std::acos(y / r);
   return {r, phi, theta};
 }
+
+XMFLOAT4X4 Float4x4Identity() {
+  // clang-format off
+  return {
+      1.f, 0.f, 0.f, 0.f,
+      0.f, 1.f, 0.f, 0.f,
+      0.f, 0.f, 1.f, 0.f,
+      0.f, 0.f, 0.f, 1.f
+  };
+  // clang-format on
+}

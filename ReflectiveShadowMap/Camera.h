@@ -2,63 +2,30 @@
 
 #include <DirectXMath.h>
 
-class Camera {
-public:
-  Camera() = default;
-
+struct Camera {
   Camera(DirectX::XMFLOAT3 worldPosition,
          DirectX::XMFLOAT3 lookTo,
          float aspectRatio,
          float vFovDeg,
          float zNear,
          float zFar)
-      : worldPosition_(worldPosition),
-        lookTo_(lookTo),
-        aspectRatio_(aspectRatio),
-        vFovDeg_(vFovDeg),
-        zNear_(zNear),
-        zFar_(zFar) {}
+      : worldPosition(worldPosition),
+        lookTo(lookTo),
+        aspectRatio(aspectRatio),
+        vFovDeg(vFovDeg),
+        zNear(zNear),
+        zFar(zFar) {}
 
-  DirectX::XMFLOAT3 GetWorldPosition() const;
+  void FocusAtPoint(DirectX::XMFLOAT3 p);
 
-  void SetWorldPosition(const DirectX::XMFLOAT3& worldPosition);
+  DirectX::XMFLOAT3 worldPosition = {0.0f, 0.0f, 0.0f};
+  DirectX::XMFLOAT3 lookTo = {0.0f, 0.0f, 1.0f};
+  DirectX::XMFLOAT3 up = {0.0f, 1.0f, 0.0f};
 
-  DirectX::XMFLOAT3 GetLookTo() const;
-
-  void SetLookTo(const DirectX::XMFLOAT3& lookTo);
-
-  void LookAt(DirectX::XMFLOAT3 focusPoint);
-
-  DirectX::XMFLOAT3 GetUpVector() const { return up_; }
-
-  void SetUpVector(const DirectX::XMFLOAT3& up) { up_ = up; }
-
-  float GetAspectRatio() const;
-
-  void SetAspectRatio(const float aspectRatio);
-
-  float GetVFovDeg() const;
-
-  void SetVFov(const float vFov);
-
-  float GetZNear() const;
-
-  void SetZNear(const float zNear);
-
-  float GetZFar() const;
-
-  void SetZFar(const float zFar);
-
-private:
-  DirectX::XMFLOAT3 worldPosition_ = {0.0f, 0.0f, 0.0f};
-  DirectX::XMFLOAT3 lookTo_ = {0.0f, 0.0f, 1.0f};
-  DirectX::XMFLOAT3 up_ = {0.0f, 1.0f, 0.0f};
-
-private:
-  float aspectRatio_ = 1.0f;
-  float vFovDeg_ = 45.0f;
-  float zNear_ = 0.1f;
-  float zFar_ = 1000.0f;
+  float aspectRatio = 1.0f;
+  float vFovDeg = 45.0f;
+  float zNear = 0.1f;
+  float zFar = 1000.0f;
 };
 
 DirectX::XMVECTOR CameraAxisX(const Camera* cam);

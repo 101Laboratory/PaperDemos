@@ -145,8 +145,10 @@
     <ClInclude Include="Camera.h" />
     <ClInclude Include="CameraInput.h" />
     <ClInclude Include="Color.h" />
+    <ClInclude Include="ConstantBuffer.h" />
     <ClInclude Include="D3DApp.h" />
     <ClInclude Include="D3DUtils.h" />
+    <ClInclude Include="DefaultBuffer.h" />
     <ClInclude Include="DirectionalLight.h" />
     <ClInclude Include="directx\d3dx12.h" />
     <ClInclude Include="FpsCamera.h" />
@@ -155,7 +157,9 @@
     <ClInclude Include="Model.h" />
     <ClInclude Include="OrbitCamera.h" />
     <ClInclude Include="Rect.h" />
+    <ClInclude Include="ReflectiveShadowMap.h" />
     <ClInclude Include="Timer.h" />
+    <ClInclude Include="UploadBuffer.h" />
     <ClInclude Include="Win32InputHandler.h" />
     <ClInclude Include="Win32Window.h" />
   </ItemGroup>
@@ -172,6 +176,7 @@
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="OrbitCamera.cpp" />
     <ClCompile Include="Rect.cpp" />
+    <ClCompile Include="ReflectiveShadowMap.cpp" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="Win32InputHandler.cpp" />
     <ClCompile Include="Win32Window.cpp" />

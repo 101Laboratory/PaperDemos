@@ -23,3 +23,6 @@ float MapRange(float val, float l0, float r0, float l1, float r1);
 std::tuple<float, float, float> ToCartesian(float r, float phi, float theta);
 
 std::tuple<float, float, float> ToSpherical(float x, float y, float z);
+
+DirectX::XMFLOAT4X4 Float4x4Identity();
+

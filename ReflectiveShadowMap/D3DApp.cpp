@@ -1,6 +1,7 @@
 #include "D3DApp.h"
 
 #include "D3DUtils.h"
+#include "Rect.h"
 
 using DX::ThrowIfFailed;
 using Microsoft::WRL::ComPtr;
@@ -10,14 +11,14 @@ D3DApp::D3DApp(std::wstring name, int viewportWidth, int viewportHeight)
     : name_{std::move(name)},
       viewport_{0.0f, 0.0f, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight)},
       scissorRect_{0, 0, static_cast<LONG>(viewportWidth), static_cast<LONG>(viewportHeight)} {
+  
   camera_ = std::make_unique<Camera>(
-      XMFLOAT3{0.0f, 0.0f, -5.0f},
+      XMFLOAT3{0.0f, 2.0f, -10.0f},
       XMFLOAT3{0.0f, 0.0f, 1.0f},
       static_cast<float>(viewportWidth) / static_cast<float>(viewportHeight),
       60.0f,
-      1.0f,
+      0.01f,
       100.0f);
-  // camera_->SetLookTo({0.25f, -0.25f * camera_->GetAspectRatio(), 0.0f});
 }
 
 void D3DApp::Initialize(HWND window) {
@@ -81,7 +82,12 @@ void D3DApp::Initialize(HWND window) {
     ThrowIfFailed(device_->CreateDescriptorHeap(&rtvHeapDesc,
                                                 IID_PPV_ARGS(rtvHeap_.ReleaseAndGetAddressOf())));
   }
+
   rtvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+  cbvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(
+      D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+
   for (int i = 0; i < s_renderTargetCount; ++i) {
     auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE{rtvHeap_->GetCPUDescriptorHandleForHeapStart(),
                                                 i,
@@ -90,9 +96,50 @@ void D3DApp::Initialize(HWND window) {
         swapChain_->GetBuffer(i, IID_PPV_ARGS(renderTargets_[i].ReleaseAndGetAddressOf())));
     device_->CreateRenderTargetView(renderTargets_[i].Get(), nullptr, handle);
   }
+
+  {
+    // depth buffer
+    auto heapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
+    auto resDesc = CD3DX12_RESOURCE_DESC::Tex2D(depthBufferFormat_,
+                                                static_cast<UINT64>(viewport_.Width),
+                                                static_cast<UINT>(viewport_.Height),
+                                                1,
+                                                0,
+                                                1,
+                                                0,
+                                                D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+    auto clearVal = CD3DX12_CLEAR_VALUE(depthBufferFormat_, 1.f, 0);
+    ThrowIfFailed(device_->CreateCommittedResource(
+        &heapProp,
+        D3D12_HEAP_FLAG_NONE,
+        &resDesc,
+        D3D12_RESOURCE_STATE_DEPTH_WRITE,
+        &clearVal,
+        IID_PPV_ARGS(depthStencilBuffer_.ReleaseAndGetAddressOf())));
+
+    // dsv heap
+    D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{};
+    dsvHeapDesc.NumDescriptors = 1;
+    dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
+    dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
+    dsvHeapDesc.NodeMask = 0;
+    ThrowIfFailed(device_->CreateDescriptorHeap(&dsvHeapDesc,
+                                                IID_PPV_ARGS(dsvHeap_.ReleaseAndGetAddressOf())));
+
+    // dsv
+    D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
+    dsvDesc.Format = depthBufferFormat_;
+    dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
+    dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
+
+    device_->CreateDepthStencilView(depthStencilBuffer_.Get(),
+                                    &dsvDesc,
+                                    dsvHeap_->GetCPUDescriptorHandleForHeapStart());
+  }
+
   {
     D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc{};
-    cbvHeapDesc.NumDescriptors = 1;
+    cbvHeapDesc.NumDescriptors = 5;  // 1 pass + 4 model; (4 model = 1 bunny + 3 walls)
     cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     ThrowIfFailed(device_->CreateDescriptorHeap(&cbvHeapDesc,
@@ -105,11 +152,17 @@ void D3DApp::Initialize(HWND window) {
 
   // Root signature
   {
-    CD3DX12_DESCRIPTOR_RANGE range[1];
-    range[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);
+    CD3DX12_DESCRIPTOR_RANGE range[2];
+    range[0].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);  // b0
+    range[1].Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);  // b1
 
-    CD3DX12_ROOT_PARAMETER rootParameter[1];
+    CD3DX12_ROOT_PARAMETER rootParameter[2];
+    // register b0: pass constant
     rootParameter[0].InitAsDescriptorTable(1, range, D3D12_SHADER_VISIBILITY_ALL);
+
+    // register b1: model constant
+    rootParameter[1].InitAsDescriptorTable(1, &range[1], D3D12_SHADER_VISIBILITY_ALL);
+
 
     CD3DX12_ROOT_SIGNATURE_DESC rootSignatureDesc{};
     rootSignatureDesc.Init(_countof(rootParameter),
@@ -168,11 +221,18 @@ void D3DApp::Initialize(HWND window) {
                                                     0,
                                                     D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
                                                     0},
+                                                   {"NORMAL",
+                                                    0,
+                                                    DXGI_FORMAT_R32G32B32_FLOAT,
+                                                    0,
+                                                    16,
+                                                    D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
+                                                    0},
                                                    {"COLOR",
                                                     0,
                                                     DXGI_FORMAT_R32G32B32A32_FLOAT,
                                                     0,
-                                                    12,
+                                                    32,
                                                     D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA,
                                                     0}};
 
@@ -183,8 +243,8 @@ void D3DApp::Initialize(HWND window) {
     psoDesc.PS = CD3DX12_SHADER_BYTECODE(pixelShader.Get());
     psoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
     psoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
-    psoDesc.DepthStencilState.DepthEnable = FALSE;
-    psoDesc.DepthStencilState.StencilEnable = FALSE;
+    psoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
+    psoDesc.DSVFormat = depthBufferFormat_;
     psoDesc.SampleMask = UINT_MAX;
     psoDesc.PrimitiveTopologyType = D3D12_PRIMITIVE_TOPOLOGY_TYPE_TRIANGLE;
     psoDesc.NumRenderTargets = 1;
@@ -201,63 +261,18 @@ void D3DApp::Initialize(HWND window) {
                                            commandAllocator_.Get(),
                                            pipelineState_.Get(),
                                            IID_PPV_ARGS(commandList_.ReleaseAndGetAddressOf())));
+
   ThrowIfFailed(commandList_->Close());
 
-  // Vertex buffer
+
+  // Constant buffer and view
   {
-    float aspectRatio = viewport_.Width / viewport_.Height;
+    passCBuffer_ = std::make_unique<ConstantBuffer<PassConstant>>(device_.Get(), 1);
 
-    Vertex vertices[] = {{{0.0f, 0.8660254f, 0.0f}, {1.0f, 0.0f, 0.0f, 1.0f}},
-                         {{1.0f, -0.8660254f, 0.0f}, {0.0f, 1.0f, 0.0f, 1.0f}},
-                         {{-1.0f, -0.8660254f, 0.0f}, {0.0f, 0.0f, 1.0f, 1.0f}}};
-
-    UINT vertexBufferSize = sizeof(vertices);
-
-    auto heapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-    auto resDesc = CD3DX12_RESOURCE_DESC::Buffer(vertexBufferSize);
-    ThrowIfFailed(
-        device_->CreateCommittedResource(&heapProp,
-                                         D3D12_HEAP_FLAG_NONE,
-                                         &resDesc,
-                                         D3D12_RESOURCE_STATE_GENERIC_READ,
-                                         nullptr,
-                                         IID_PPV_ARGS(vertexBuffer_.ReleaseAndGetAddressOf())));
-    // Copy vertex data to vertex buffer
-    UINT8* vertexBegin;
-    CD3DX12_RANGE readRange(0, 0);
-    ThrowIfFailed(vertexBuffer_->Map(0, &readRange, reinterpret_cast<void**>(&vertexBegin)));
-    memcpy(vertexBegin, vertices, vertexBufferSize);
-    vertexBuffer_->Unmap(0, nullptr);
-
-    // Vertex buffer view
-    vertexBufferView_.BufferLocation = vertexBuffer_->GetGPUVirtualAddress();
-    vertexBufferView_.StrideInBytes = sizeof(Vertex);
-    vertexBufferView_.SizeInBytes = vertexBufferSize;
-  }
-
-  // Constant buffer
-  {
-    constexpr UINT cBufferSize = (sizeof(CBufferObject) + 255) & 0xffffff00;
-    static_assert(cBufferSize % 256 == 0, "Constant buffer must be 256-byte aligned");
-
-    auto heapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
-    auto resDesc = CD3DX12_RESOURCE_DESC::Buffer(cBufferSize);
-    ThrowIfFailed(
-        device_->CreateCommittedResource(&heapProp,
-                                         D3D12_HEAP_FLAG_NONE,
-                                         &resDesc,
-                                         D3D12_RESOURCE_STATE_GENERIC_READ,
-                                         nullptr,
-                                         IID_PPV_ARGS(cBuffer_.ReleaseAndGetAddressOf())));
-
-    // CBV
     D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc{};
-    cbvDesc.BufferLocation = cBuffer_->GetGPUVirtualAddress();
-    cbvDesc.SizeInBytes = cBufferSize;
+    cbvDesc.BufferLocation = passCBuffer_->ElementGpuVirtualAddress();
+    cbvDesc.SizeInBytes = passCBuffer_->BufferByteSize();
     device_->CreateConstantBufferView(&cbvDesc, cbvHeap_->GetCPUDescriptorHandleForHeapStart());
-
-    CD3DX12_RANGE readRange(0, 0);
-    ThrowIfFailed(cBuffer_->Map(0, &readRange, reinterpret_cast<void**>(&cBufferBegin_)));
   }
 
   // Fence
@@ -267,6 +282,188 @@ void D3DApp::Initialize(HWND window) {
                                        IID_PPV_ARGS(fence_.ReleaseAndGetAddressOf())));
 
     WaitForPreviousFrame();
+  }
+
+  InitializeScene();
+}
+
+void D3DApp::InitializeScene() {
+  ObjModel bunny{"stanford-bunny.obj"};
+
+  // Load vertices of bunny
+  UINT bunnyVBufferSize = bunny.VerticesByteSize();
+
+  UploadBuffer<Vertex> bunnyVBuffer{device_.Get(), bunny.VertexCount()};
+  bunnyVBuffer.LoadBuffer(0, bunny.VerticesBegin(), bunnyVBufferSize);
+
+  // Load indices of bunny
+  UINT bunnyIBufferSize = bunny.IndicesByteSize();
+
+  UploadBuffer<std::uint16_t> bunnyIBuffer{device_.Get(), bunny.IndexCount()};
+  bunnyIBuffer.LoadBuffer(0, bunny.IndicesBegin(), bunnyIBufferSize);
+
+  RectXZ rect{1.f, 1.f};
+  // Load plane vertices
+  auto&& rectVertices = RectXZVertices(rect);
+  UINT rectVBufferSize = rectVertices.size() * sizeof(Vertex);
+
+  UploadBuffer<Vertex> rectVBuffer{device_.Get(), rectVertices.size()};
+  rectVBuffer.LoadBuffer(0, rectVertices.data(), rectVBufferSize);
+
+  // Load plane indices
+  auto&& rectIndices = RectXZIndices(rect);
+  UINT rectIBufferSize = rectIndices.size() * sizeof(std::uint16_t);
+
+  UploadBuffer<std::uint16_t> rectIBuffer{device_.Get(), rectIndices.size()};
+  rectIBuffer.LoadBuffer(0, rectIndices.data(), rectIBufferSize);
+
+  ThrowIfFailed(commandList_->Reset(commandAllocator_.Get(), pipelineState_.Get()));
+
+  // Concatenate vertex buffers
+  UINT vBufferSize = bunnyVBufferSize + rectVBufferSize;
+  vBuffer_ = std::make_unique<DefaultBuffer>(device_.Get(), vBufferSize);
+  commandList_->CopyBufferRegion(vBuffer_->Resource(),
+                                 0,
+                                 bunnyVBuffer.Resource(),
+                                 0,
+                                 bunnyVBuffer.BufferByteSize());
+  commandList_->CopyBufferRegion(vBuffer_->Resource(),
+                                 bunnyVBufferSize,
+                                 rectVBuffer.Resource(),
+                                 0,
+                                 rectVBufferSize);
+
+  // Concatenate index buffers
+  UINT iBufferSize = bunnyIBufferSize + rectIBufferSize;
+  iBuffer_ = std::make_unique<DefaultBuffer>(device_.Get(), iBufferSize);
+  commandList_->CopyBufferRegion(iBuffer_->Resource(),
+                                 0,
+                                 bunnyIBuffer.Resource(),
+                                 0,
+                                 bunnyIBuffer.BufferByteSize());
+  commandList_->CopyBufferRegion(iBuffer_->Resource(),
+                                 bunnyIBufferSize,
+                                 rectIBuffer.Resource(),
+                                 0,
+                                 rectIBufferSize);
+
+  ThrowIfFailed(commandList_->Close());
+  ExecuteCommandList();
+  WaitForPreviousFrame();
+
+  // VBV and IBV
+  vbv_.BufferLocation = vBuffer_->GpuVirtualAddress();
+  vbv_.SizeInBytes = vBufferSize;
+  vbv_.StrideInBytes = sizeof(Vertex);
+
+  ibv_.BufferLocation = iBuffer_->GpuVirtualAddress();
+  ibv_.SizeInBytes = iBufferSize;
+  ibv_.Format = DXGI_FORMAT_R16_UINT;
+
+  // Render item of bunny
+  auto origin = XMVectorSet(0.f, 0.f, 0.f, 0.f);
+  {
+    RenderItem bunnyItem;
+    float s = 20.f;
+    auto translation = XMVectorSet(0.f, 0.f, 0.f, 0.f);
+    auto rotation = XMQuaternionIdentity();
+    auto scale = XMVectorSet(s, s, s, 0.f);
+    auto transform = XMMatrixTransformation(origin,
+                                            XMQuaternionIdentity(),
+                                            scale,
+                                            origin,
+                                            rotation,
+                                            translation);
+    XMStoreFloat4x4(&bunnyItem.world, transform);
+    bunnyItem.startIndexLocation = 0;
+    bunnyItem.indexCount = bunnyIBuffer.ElementCount();
+    bunnyItem.baseVertexLocation = 0;
+    bunnyItem.modelCBufferIndex = 0;  // Model constant buffer index [0]
+    bunnyItem.material = std::make_shared<Diffuse>();
+    renderItems_.push_back(bunnyItem);
+  }
+
+  // Render items of walls
+  float cornerSize = 5.f;
+  {
+    RenderItem rectXZ;
+    auto translation = XMVectorSet(0.f, 0.f, 0.f, 0.f);
+    auto rotation = XMQuaternionIdentity();
+    auto scale = XMVectorSet(cornerSize, cornerSize, cornerSize, 0.f);
+    auto transform = XMMatrixTransformation(origin,
+                                            XMQuaternionIdentity(),
+                                            scale,
+                                            origin,
+                                            rotation,
+                                            translation);
+    XMStoreFloat4x4(&rectXZ.world, transform);
+    rectXZ.startIndexLocation = bunnyIBuffer.ElementCount();
+    rectXZ.indexCount = rectIBuffer.ElementCount();
+    rectXZ.baseVertexLocation = bunnyVBuffer.ElementCount();
+    rectXZ.modelCBufferIndex = 1;
+    rectXZ.material = std::make_shared<Diffuse>(Diffuse{XMFLOAT3{0.f, 0.8f, 0.f}});
+    renderItems_.push_back(rectXZ);
+  }
+  {
+    RenderItem rectXY;
+    auto translation = XMVectorSet(0.f, cornerSize / 2, cornerSize / 2, 0.f);
+    auto rotation = XMQuaternionRotationAxis(XMVectorSet(1.f, 0.f, 0.f, 0.f), -XM_PIDIV2);
+    auto scale = XMVectorSet(cornerSize, cornerSize, cornerSize, 0.f);
+    auto transform = XMMatrixTransformation(origin,
+                                            XMQuaternionIdentity(),
+                                            scale,
+                                            origin,
+                                            rotation,
+                                            translation);
+    XMStoreFloat4x4(&rectXY.world, transform);
+    rectXY.startIndexLocation = bunnyIBuffer.ElementCount();
+    rectXY.indexCount = rectIBuffer.ElementCount();
+    rectXY.baseVertexLocation = bunnyVBuffer.ElementCount();
+    rectXY.modelCBufferIndex = 2;
+    rectXY.material = std::make_shared<Diffuse>(Diffuse{XMFLOAT3{0.f, 0.f, 0.8f}});
+    renderItems_.push_back(rectXY);
+  }
+  {
+    RenderItem rectYZ;
+    auto translation = XMVectorSet(-cornerSize / 2, cornerSize / 2, 0.f, 0.f);
+    auto rotation = XMQuaternionRotationAxis(XMVectorSet(0.f, 0.f, 1.f, 0.f), -XM_PIDIV2);
+    auto scale = XMVectorSet(cornerSize, cornerSize, cornerSize, 0.f);
+    auto transform = XMMatrixTransformation(origin,
+                                            XMQuaternionIdentity(),
+                                            scale,
+                                            origin,
+                                            rotation,
+                                            translation);
+    XMStoreFloat4x4(&rectYZ.world, transform);
+    rectYZ.startIndexLocation = bunnyIBuffer.ElementCount();
+    rectYZ.indexCount = rectIBuffer.ElementCount();
+    rectYZ.baseVertexLocation = bunnyVBuffer.ElementCount();
+    rectYZ.modelCBufferIndex = 3;
+    rectYZ.material = std::make_shared<Diffuse>(Diffuse{XMFLOAT3{0.8f, 0.f, 0.f}});
+    renderItems_.push_back(rectYZ);
+  }
+
+  // Model constant buffers for render items
+  modelCBuffer_ = std::make_unique<ConstantBuffer<ModelConstant>>(device_.Get(),
+                                                                  renderItems_.size());
+
+  // CBVs for model constant buffer.
+  // Index 0 of cbvHeap is modelCbv to pass constant buffer, so start from index 1.
+  int index = 1;
+  auto cbv = CD3DX12_CPU_DESCRIPTOR_HANDLE{cbvHeap_->GetCPUDescriptorHandleForHeapStart(),
+                                           index,
+                                           cbvDescriptorSize_};
+  for (auto& ri : renderItems_) {
+    D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc{};
+    cbvDesc.BufferLocation = modelCBuffer_->ElementGpuVirtualAddress(ri.modelCBufferIndex);
+    cbvDesc.SizeInBytes = modelCBuffer_->ElementPaddedSize();
+    device_->CreateConstantBufferView(&cbvDesc, cbv);
+
+    ri.modelCbv = CD3DX12_GPU_DESCRIPTOR_HANDLE{cbvHeap_->GetGPUDescriptorHandleForHeapStart(),
+                                                index,
+                                                cbvDescriptorSize_};
+    ++index;
+    cbv.Offset(1, cbvDescriptorSize_);
   }
 }
 
@@ -284,23 +481,20 @@ void D3DApp::FrameStatics() {
     accumulatedFrameCount_ = 0;
     accumulatedFrameTime_ = 0.0f;
 
-    auto [x, y, z] = camera_->GetWorldPosition();
+    auto [x, y, z] = camera_->worldPosition;
     auto posString = std::to_wstring(x) + L"," + std::to_wstring(y) + L"," + std::to_wstring(z);
     OutputDebugString((std::to_wstring(totalTimeElapsed_) + L"\t" + posString + L"\n").c_str());
   }
 }
 
 void D3DApp::UpdateScene() {
-  // auto t = totalTimeElapsed_;
-  // float r = 5.0f;
-  // float phi = t * 1.0f;
-  // float theta = XM_PIDIV2;
-  //
-  // float x = r * std::sin(theta) * std::cos(phi);
-  // float y = r * std::cos(theta);
-  // float z = r * std::sin(theta) * std::sin(phi);
-  //
-  // camera_->SetWorldPosition({x, y, z});
+  // Update model constants for every render items
+  for (const auto& ri : renderItems_) {
+    ModelConstant c{};
+    c.world = ri.world;
+    c.color = ri.material->albedo;
+    modelCBuffer_->LoadElement(ri.modelCBufferIndex, c);
+  }
 }
 
 void D3DApp::Update() {
@@ -311,24 +505,24 @@ void D3DApp::Update() {
   UpdateScene();
 
   // Update constant buffer
-  constexpr UINT cBufferSize = (sizeof(CBufferObject) + 255) & 0xffffff00;
-  memset(cBufferBegin_, 0, cBufferSize);
+  passCBuffer_->ClearBuffer(0);
 
-  CBufferObject cbo{};
+  PassConstant cbo{};
   XMStoreFloat4x4(&cbo.view, MatView(camera_.get()));
   XMStoreFloat4x4(&cbo.proj, MatProj(camera_.get()));
-  XMStoreFloat4(&cbo.red, XMVectorSet(1.0f, 0.0f, 0.0f, 1.0f));
-  XMStoreFloat4x4(&cbo.translate, XMMatrixTranslation(1.0f, 0.0f, 0.0f));
-  // cbo.timeElapsed = ToSeconds(timer_.TimeElapsed());
   cbo.timeElapsed = totalTimeElapsed_;
-  memcpy(cBufferBegin_, &cbo, sizeof(cbo));
+  passCBuffer_->LoadElement(0, cbo);
+}
+
+void D3DApp::ExecuteCommandList() const {
+  ID3D12CommandList* commandLists[] = {commandList_.Get()};
+  commandQueue_->ExecuteCommandLists(_countof(commandLists), commandLists);
 }
 
 void D3DApp::Render() {
   PopulateCommandList();
 
-  ID3D12CommandList* commandLists[] = {commandList_.Get()};
-  commandQueue_->ExecuteCommandLists(_countof(commandLists), commandLists);
+  ExecuteCommandList();
 
   // present and swap front and back buffers
   ThrowIfFailed(swapChain_->Present(1, 0));
@@ -357,19 +551,44 @@ void D3DApp::PopulateCommandList() {
   auto rtv = CD3DX12_CPU_DESCRIPTOR_HANDLE{rtvHeap_->GetCPUDescriptorHandleForHeapStart(),
                                            frameIndex_,
                                            rtvDescriptorSize_};
-  commandList_->OMSetRenderTargets(1, &rtv, FALSE, nullptr);
+  auto dsv = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
+
+  commandList_->OMSetRenderTargets(1, &rtv, true, &dsv);
 
   constexpr float clearColor[] = {0.0f, 0.2f, 0.4f, 1.0f};
   commandList_->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
+
+  commandList_->ClearDepthStencilView(dsvHeap_->GetCPUDescriptorHandleForHeapStart(),
+                                      D3D12_CLEAR_FLAG_DEPTH,
+                                      1.f,
+                                      0,
+                                      0,
+                                      nullptr);
+
   commandList_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
-  commandList_->IASetVertexBuffers(0, 1, &vertexBufferView_);
-  commandList_->DrawInstanced(3, 1, 0, 0);
+  commandList_->IASetVertexBuffers(0, 1, &vbv_);
+  commandList_->IASetIndexBuffer(&ibv_);
+
+  // commandList_->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
+  DrawAllRenderItems();
 
   Transition(renderTargets_[frameIndex_].Get(),
              D3D12_RESOURCE_STATE_RENDER_TARGET,
              D3D12_RESOURCE_STATE_PRESENT);
 
   ThrowIfFailed(commandList_->Close());
+}
+
+void D3DApp::DrawAllRenderItems() {
+  for (const auto& ri : renderItems_) {
+    // Model constant modelCbv
+    commandList_->SetGraphicsRootDescriptorTable(1, ri.modelCbv);
+    commandList_->DrawIndexedInstanced(ri.indexCount,
+                                       1,
+                                       ri.startIndexLocation,
+                                       ri.baseVertexLocation,
+                                       0);
+  }
 }
 
 void D3DApp::Destroy() {

@@ -13,37 +13,39 @@ void Win32InputHandler::HandleInput(UINT msg, WPARAM wParam, LPARAM lParam) {
   switch (msg) {
     case WM_MOUSEMOVE:
       OnMouseMove(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-      return;
+      break;
 
     case WM_LBUTTONDOWN:
       OnLMouseDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-      return;
+      break;
 
     case WM_LBUTTONUP:
       OnLMouseUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-      return;
+      break;
 
     case WM_RBUTTONDOWN:
       OnRMouseDown(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-      return;
+      break;
 
     case WM_RBUTTONUP:
       OnRMouseUp(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
-      return;
+      break;
 
     case WM_KEYDOWN:
       OnKeyDown(static_cast<int>(wParam));
-      return;
+      break;
 
     case WM_KEYUP:
       OnKeyUp(static_cast<int>(wParam));
-      return;
+      break;
 
     case WM_MOUSEWHEEL:
       OnMouseScroll(GET_WHEEL_DELTA_WPARAM(wParam));
-      return;
+      break;
 
     default:
-      return;
+      break;
   }
+
+  ProcessKey();
 }

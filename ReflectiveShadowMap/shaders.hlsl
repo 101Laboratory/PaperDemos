@@ -1,30 +1,40 @@
 
-
-cbuffer ConstantBufferObject : register(b0) {
+cbuffer PassConstant : register(b0) {
   float4x4 g_view;
   float4x4 g_proj;
-  float4x4 g_translate;
-  float4 g_red;
   float g_timeElapsed;
+};
+
+cbuffer ModelConstant : register(b1) {
+  float4x4 g_model;
+  float3 g_albedo;
+};
+
+struct Vin {
+  float3 pos : POSITION;
+  float3 normal : NORMAL;
+  float4 color : COLOR;
 };
 
 struct Vout {
   float4 pos : SV_POSITION;
   float4 color : COLOR;
+  float3 normal : NORMAL;
 };
 
-Vout VS(float3 pos : POSITION, float4 color : COLOR) {
+Vout VS(Vin vin) {
   Vout vout;
-  float4x4 viewProj = transpose(mul(g_proj, g_view));
-  vout.pos = mul(float4(pos, 1.0f), viewProj);
-  vout.color = color;
+  float4x4 mvp = mul(mul(g_proj, g_view), g_model);
+  vout.pos = mul(mvp, float4(vin.pos, 1.0f));
+  vout.color = vin.color;
+  vout.normal = vin.normal;
   return vout;
 }
 
 float4 PS(Vout pin) : SV_TARGET {
-  float r = sin(g_timeElapsed);
-  float g = sin(2 * g_timeElapsed);
-  float b = sin(4 * g_timeElapsed);
-  float3 v = 0.5 * (float3(r, g, b) + 1);
-  return pin.color * float4(v, 1.0f);
+  float3 l = normalize(float3(1.f, 1.f, -1.f));
+  float3 n = normalize(pin.normal);
+  float3 c = dot(l, n) * g_albedo;
+  return float4(c, 1.f);
+  // return float4(1.f, 1.f, 1.f, 1.f);
 }

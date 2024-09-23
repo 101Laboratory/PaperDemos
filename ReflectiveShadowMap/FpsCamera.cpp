@@ -5,16 +5,15 @@
 using namespace DirectX;
 
 void CameraWorldOffset(Camera* cam, XMFLOAT3 offset) {
-  auto pos = ToXMVector(cam->GetWorldPosition());
+  auto pos = ToXMVector(cam->worldPosition);
   auto offsetV = ToXMVector(offset);
   auto newPos = ToXMFloat3(pos + offsetV);
-  cam->SetWorldPosition(newPos);
+  cam->worldPosition = newPos;
 }
 
 void CameraMoveForward(Camera* cam, float d) {
   XMVECTOR dir = CameraAxisZ(cam);
   CameraWorldOffset(cam, ToXMFloat3(d * dir));
-  // TODO: avoid pos and lookat equal
 }
 
 void CameraMoveRight(Camera* cam, float d) {
@@ -30,8 +29,7 @@ void CameraMoveUp(Camera* cam, float d) {
 void CameraLookRotate(Camera* cam, XMVECTOR q) {
   XMVECTOR z = CameraAxisZ(cam);
   auto z1 = XMVector3Rotate(z, q);
-  auto lookAt = ToXMVector(cam->GetWorldPosition()) + z1;
-  cam->SetLookTo(ToXMFloat3(lookAt));
+  cam->lookTo = ToXMFloat3(z1);
 }
 
 void CameraLookRight(Camera* cam, float deg) {

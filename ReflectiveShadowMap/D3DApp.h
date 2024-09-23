@@ -9,19 +9,31 @@
 #include <memory>
 
 #include "camera.h"
+#include "ConstantBuffer.h"
+#include "DefaultBuffer.h"
+#include "Material.h"
+#include "Model.h"
 #include "Timer.h"
 
-struct CBufferObject {
+struct PassConstant {
   DirectX::XMFLOAT4X4 view;
   DirectX::XMFLOAT4X4 proj;
-  DirectX::XMFLOAT4X4 translate;
-  DirectX::XMFLOAT4 red;
   float timeElapsed;
 };
 
-struct Vertex {
-  DirectX::XMFLOAT3 pos;
-  DirectX::XMFLOAT4 color;
+struct ModelConstant {
+  DirectX::XMFLOAT4X4 world;  // Model-to-world transform
+  DirectX::XMFLOAT3 color;
+};
+
+struct RenderItem {
+  DirectX::XMFLOAT4X4 world = Float4x4Identity();
+  size_t startIndexLocation = 0;
+  size_t indexCount = 0;
+  size_t baseVertexLocation = 0;
+  size_t modelCBufferIndex = 0;
+  CD3DX12_GPU_DESCRIPTOR_HANDLE modelCbv;
+  std::shared_ptr<Diffuse> material;
 };
 
 class D3DApp {
@@ -32,7 +44,10 @@ public:
 
   void Initialize(HWND window);
 
+  void InitializeScene();
+
   void Update();
+  void ExecuteCommandList() const;
 
   void Render();
 
@@ -43,6 +58,7 @@ public:
   void StartRunning();
 
   void PauseRunning();
+
 
   Camera* GetCamera() const;
 
@@ -58,7 +74,7 @@ private:
   std::wstring name_;
 
   bool isRunning_ = false;
-  
+
   Timer<Milliseconds> timer_;
   float framesPerSecond_ = 0.0f;
   float totalTimeElapsed_ = 0.0f;
@@ -81,18 +97,29 @@ private:
   int frameIndex_ = -1;
 
   UINT rtvDescriptorSize_ = 0;
+  UINT cbvDescriptorSize_ = 0;
 
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap_;
+  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvHeap_;
   Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> cbvHeap_;
+
+  Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilBuffer_;
+  DXGI_FORMAT depthBufferFormat_ = DXGI_FORMAT_D16_UNORM;
 
   Microsoft::WRL::ComPtr<ID3D12RootSignature> rootSignature_;
   Microsoft::WRL::ComPtr<ID3D12PipelineState> pipelineState_;
 
-  Microsoft::WRL::ComPtr<ID3D12Resource> vertexBuffer_;
-  D3D12_VERTEX_BUFFER_VIEW vertexBufferView_{};
 
-  Microsoft::WRL::ComPtr<ID3D12Resource> cBuffer_;
-  UINT8* cBufferBegin_ = nullptr;
+  std::unique_ptr<DefaultBuffer> vBuffer_;
+  D3D12_VERTEX_BUFFER_VIEW vbv_{};
+
+  std::unique_ptr<DefaultBuffer> iBuffer_;
+  D3D12_INDEX_BUFFER_VIEW ibv_;
+
+  std::vector<RenderItem> renderItems_;
+
+  std::unique_ptr<ConstantBuffer<PassConstant>> passCBuffer_;
+  std::unique_ptr<ConstantBuffer<ModelConstant>> modelCBuffer_;
 
   Microsoft::WRL::ComPtr<ID3D12Fence> fence_;
   UINT64 nextFenceValue_ = 0;
@@ -105,4 +132,5 @@ private:
 
   void FrameStatics();
   void UpdateScene();
+  void DrawAllRenderItems();
 };

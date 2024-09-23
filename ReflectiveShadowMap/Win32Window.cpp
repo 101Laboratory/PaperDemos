@@ -35,6 +35,7 @@ LRESULT CALLBACK WindowProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 
     case WM_DESTROY:
       PostQuitMessage(0);
+      window->StopD3DApp();
       return 0;
   }
 
@@ -88,6 +89,7 @@ void Win32Window::RunD3DApp(D3DApp* app) {
 
   app->Initialize(hwnd_);
   app->StartRunning();
+  isRunning_ = true;
 }
 
 HWND Win32Window::GetHandle() const {
@@ -111,4 +113,12 @@ void Win32Window::ForwardInput(UINT msg, WPARAM wParam, LPARAM lParam) {
       (*it++)->HandleInput(msg, wParam, lParam);
     }
   }
+}
+
+void Win32Window::StopD3DApp() {
+  if (!app_)
+    return;
+
+  app_->Destroy();
+  isRunning_ = false;
 }

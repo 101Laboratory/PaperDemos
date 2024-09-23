@@ -68,6 +68,18 @@
     <ClInclude Include="Rect.h">
       <Filter>Render</Filter>
     </ClInclude>
+    <ClInclude Include="ReflectiveShadowMap.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="UploadBuffer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="ConstantBuffer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
+    <ClInclude Include="DefaultBuffer.h">
+      <Filter>Render</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Color.cpp">
@@ -114,6 +126,9 @@
     </ClCompile>
     <ClCompile Include="Rect.cpp">
       <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="ReflectiveShadowMap.cpp">
+      <Filter>Window</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

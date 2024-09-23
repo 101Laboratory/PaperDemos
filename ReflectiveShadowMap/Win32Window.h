@@ -24,6 +24,10 @@ public:
 
   void ForwardInput(UINT msg, WPARAM wParam, LPARAM lParam);
 
+  void StopD3DApp();
+
+  bool IsRunning() const { return isRunning_; }
+
 private:
   // ReSharper disable once CppInconsistentNaming
   // ReSharper disable once IdentifierTypo
@@ -34,5 +38,6 @@ private:
   int nCmdShow_;
 
   D3DApp* app_ = nullptr;
+  bool isRunning_ = false;
   std::vector<std::unique_ptr<Win32InputHandler>> inputHandlers_;
 };

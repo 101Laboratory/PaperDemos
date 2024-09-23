@@ -10,7 +10,7 @@ void CameraSetOrbitWithOffset(Camera* cam,
                               float deltaPhiDeg,
                               float deltaThetaDeg,
                               float minR) {
-  auto p = ToXMVector(cam->GetWorldPosition());
+  auto p = ToXMVector(cam->worldPosition);
   auto f = ToXMVector(focus);
 
   const auto& [dx0, dy0, dz0] = ToXMFloat3(p - f);
@@ -24,6 +24,6 @@ void CameraSetOrbitWithOffset(Camera* cam,
 
   const auto& [dx, dy, dz] = ToCartesian(r, phi, theta);
   auto pos = f + XMVectorSet(dx, dy, dz, 0.0f);
-  cam->SetWorldPosition(ToXMFloat3(pos));
-  cam->LookAt(focus);
+  cam->worldPosition = ToXMFloat3(pos);
+  cam->FocusAtPoint(focus);
 }
