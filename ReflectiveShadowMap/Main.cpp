@@ -14,6 +14,13 @@ void PollEvent() {
   }
 }
 
+void DisplayFramesPerSecond(const Win32Window& window, const D3DApp& app) {
+  auto title = app.GetAppName();
+  auto fps = std::to_wstring(app.GetFramesPerSecond());
+  title += L"\t" + fps + L" fps";
+  SetWindowText(window.GetHandle(), title.c_str());
+}
+
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine, int nCmdShow) {
   try {
     Win32Window window(hInstance, hPrevInstance, pCmdLine, nCmdShow);
@@ -36,10 +43,7 @@ int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR pCmdLine
       app.Update();
       app.Render();
 
-      auto title = app.GetAppName();
-      auto fps = std::to_wstring(static_cast<int>(app.GetFramesPerSecond()));
-      title += L"\t" + fps + L" fps";
-      SetWindowText(window.GetHandle(), title.c_str());
+      DisplayFramesPerSecond(window, app);
     }
 
   } catch (const std::runtime_error& e) {

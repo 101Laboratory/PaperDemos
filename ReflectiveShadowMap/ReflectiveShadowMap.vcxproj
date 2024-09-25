@@ -149,6 +149,7 @@
     <ClInclude Include="D3DApp.h" />
     <ClInclude Include="D3DUtils.h" />
     <ClInclude Include="DefaultBuffer.h" />
+    <ClInclude Include="DescriptorHeap.h" />
     <ClInclude Include="DirectionalLight.h" />
     <ClInclude Include="directx\d3dx12.h" />
     <ClInclude Include="FpsCamera.h" />
@@ -168,6 +169,7 @@
     <ClCompile Include="CameraInput.cpp" />
     <ClCompile Include="Color.cpp" />
     <ClCompile Include="D3DApp.cpp" />
+    <ClCompile Include="DescriptorHeap.cpp" />
     <ClCompile Include="DirectionalLight.cpp" />
     <ClCompile Include="FpsCamera.cpp" />
     <ClCompile Include="Main.cpp" />

@@ -80,6 +80,9 @@
     <ClInclude Include="DefaultBuffer.h">
       <Filter>Render</Filter>
     </ClInclude>
+    <ClInclude Include="DescriptorHeap.h">
+      <Filter>Render</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Color.cpp">
@@ -128,7 +131,10 @@
       <Filter>Render</Filter>
     </ClCompile>
     <ClCompile Include="ReflectiveShadowMap.cpp">
-      <Filter>Window</Filter>
+      <Filter>Render</Filter>
+    </ClCompile>
+    <ClCompile Include="DescriptorHeap.cpp">
+      <Filter>Render</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

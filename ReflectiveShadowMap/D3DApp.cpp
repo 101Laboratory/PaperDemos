@@ -11,7 +11,7 @@ D3DApp::D3DApp(std::wstring name, int viewportWidth, int viewportHeight)
     : name_{std::move(name)},
       viewport_{0.0f, 0.0f, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight)},
       scissorRect_{0, 0, static_cast<LONG>(viewportWidth), static_cast<LONG>(viewportHeight)} {
-  
+
   camera_ = std::make_unique<Camera>(
       XMFLOAT3{0.0f, 2.0f, -10.0f},
       XMFLOAT3{0.0f, 0.0f, 1.0f},
@@ -24,12 +24,10 @@ D3DApp::D3DApp(std::wstring name, int viewportWidth, int viewportHeight)
 void D3DApp::Initialize(HWND window) {
   UINT dxgiFactoryFlags = 0;
 #if defined(_DEBUG)
-  {
-    ComPtr<ID3D12Debug> debugController;
-    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(debugController.GetAddressOf())))) {
-      debugController->EnableDebugLayer();
-      dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
-    }
+  if (ComPtr<ID3D12Debug> debugController;
+      SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(debugController.GetAddressOf())))) {
+    debugController->EnableDebugLayer();
+    dxgiFactoryFlags |= DXGI_CREATE_FACTORY_DEBUG;
   }
 #endif
 
@@ -73,25 +71,12 @@ void D3DApp::Initialize(HWND window) {
     ThrowIfFailed(swapChain.As(&swapChain_));
     frameIndex_ = swapChain_->GetCurrentBackBufferIndex();
   }
-  {
-    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc{};
-    rtvHeapDesc.NumDescriptors = s_renderTargetCount;
-    rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
-    rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-    rtvHeapDesc.NodeMask = 0;
-    ThrowIfFailed(device_->CreateDescriptorHeap(&rtvHeapDesc,
-                                                IID_PPV_ARGS(rtvHeap_.ReleaseAndGetAddressOf())));
-  }
 
-  rtvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
-  cbvDescriptorSize_ = device_->GetDescriptorHandleIncrementSize(
-      D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+  rtvHeap_ = MakeRtvHeap(device_.Get(), s_renderTargetCount);
 
 
   for (int i = 0; i < s_renderTargetCount; ++i) {
-    auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE{rtvHeap_->GetCPUDescriptorHandleForHeapStart(),
-                                                i,
-                                                rtvDescriptorSize_};
+    auto handle = rtvHeap_->CpuHandle(i);
     ThrowIfFailed(
         swapChain_->GetBuffer(i, IID_PPV_ARGS(renderTargets_[i].ReleaseAndGetAddressOf())));
     device_->CreateRenderTargetView(renderTargets_[i].Get(), nullptr, handle);
@@ -118,33 +103,20 @@ void D3DApp::Initialize(HWND window) {
         IID_PPV_ARGS(depthStencilBuffer_.ReleaseAndGetAddressOf())));
 
     // dsv heap
-    D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc{};
-    dsvHeapDesc.NumDescriptors = 1;
-    dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
-    dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
-    dsvHeapDesc.NodeMask = 0;
-    ThrowIfFailed(device_->CreateDescriptorHeap(&dsvHeapDesc,
-                                                IID_PPV_ARGS(dsvHeap_.ReleaseAndGetAddressOf())));
+    dsvHeap_ = MakeDsvHeap(device_.Get(), 1);
+
 
     // dsv
     D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc{};
     dsvDesc.Format = depthBufferFormat_;
     dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
     dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
-
-    device_->CreateDepthStencilView(depthStencilBuffer_.Get(),
-                                    &dsvDesc,
-                                    dsvHeap_->GetCPUDescriptorHandleForHeapStart());
+    device_->CreateDepthStencilView(depthStencilBuffer_.Get(), &dsvDesc, dsvHeap_->CpuHandle(0));
   }
 
-  {
-    D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc{};
-    cbvHeapDesc.NumDescriptors = 5;  // 1 pass + 4 model; (4 model = 1 bunny + 3 walls)
-    cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
-    ThrowIfFailed(device_->CreateDescriptorHeap(&cbvHeapDesc,
-                                                IID_PPV_ARGS(cbvHeap_.ReleaseAndGetAddressOf())));
-  }
+  // 1 pass + 4 model; (4 model = 1 bunny + 3 walls)
+  cbvHeap_ = MakeCbvSrvUavHeap(device_.Get(), 5);
+
 
   ThrowIfFailed(
       device_->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
@@ -272,7 +244,8 @@ void D3DApp::Initialize(HWND window) {
     D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc{};
     cbvDesc.BufferLocation = passCBuffer_->ElementGpuVirtualAddress();
     cbvDesc.SizeInBytes = passCBuffer_->BufferByteSize();
-    device_->CreateConstantBufferView(&cbvDesc, cbvHeap_->GetCPUDescriptorHandleForHeapStart());
+    // device_->CreateConstantBufferView(&cbvDesc, cbvHeap_->GetCPUDescriptorHandleForHeapStart());
+    device_->CreateConstantBufferView(&cbvDesc, cbvHeap_->CpuHandle(0));
   }
 
   // Fence
@@ -450,20 +423,16 @@ void D3DApp::InitializeScene() {
   // CBVs for model constant buffer.
   // Index 0 of cbvHeap is modelCbv to pass constant buffer, so start from index 1.
   int index = 1;
-  auto cbv = CD3DX12_CPU_DESCRIPTOR_HANDLE{cbvHeap_->GetCPUDescriptorHandleForHeapStart(),
-                                           index,
-                                           cbvDescriptorSize_};
   for (auto& ri : renderItems_) {
+    auto cbv = cbvHeap_->CpuHandle(index);
+    
     D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc{};
     cbvDesc.BufferLocation = modelCBuffer_->ElementGpuVirtualAddress(ri.modelCBufferIndex);
     cbvDesc.SizeInBytes = modelCBuffer_->ElementPaddedSize();
     device_->CreateConstantBufferView(&cbvDesc, cbv);
 
-    ri.modelCbv = CD3DX12_GPU_DESCRIPTOR_HANDLE{cbvHeap_->GetGPUDescriptorHandleForHeapStart(),
-                                                index,
-                                                cbvDescriptorSize_};
+    ri.modelCbv = cbvHeap_->GpuHandle(index);
     ++index;
-    cbv.Offset(1, cbvDescriptorSize_);
   }
 }
 
@@ -480,10 +449,6 @@ void D3DApp::FrameStatics() {
     framesPerSecond_ = static_cast<float>(accumulatedFrameCount_) / accumulatedFrameTime_;
     accumulatedFrameCount_ = 0;
     accumulatedFrameTime_ = 0.0f;
-
-    auto [x, y, z] = camera_->worldPosition;
-    auto posString = std::to_wstring(x) + L"," + std::to_wstring(y) + L"," + std::to_wstring(z);
-    OutputDebugString((std::to_wstring(totalTimeElapsed_) + L"\t" + posString + L"\n").c_str());
   }
 }
 
@@ -536,10 +501,10 @@ void D3DApp::PopulateCommandList() {
 
   commandList_->SetGraphicsRootSignature(rootSignature_.Get());
 
-  ID3D12DescriptorHeap* heaps[] = {cbvHeap_.Get()};
+  ID3D12DescriptorHeap* heaps[] = {cbvHeap_->Heap()};
   commandList_->SetDescriptorHeaps(_countof(heaps), heaps);
 
-  commandList_->SetGraphicsRootDescriptorTable(0, cbvHeap_->GetGPUDescriptorHandleForHeapStart());
+  commandList_->SetGraphicsRootDescriptorTable(0, cbvHeap_->GpuHandle(0));
 
   commandList_->RSSetViewports(1, &viewport_);
   commandList_->RSSetScissorRects(1, &scissorRect_);
@@ -548,28 +513,22 @@ void D3DApp::PopulateCommandList() {
              D3D12_RESOURCE_STATE_PRESENT,
              D3D12_RESOURCE_STATE_RENDER_TARGET);
 
-  auto rtv = CD3DX12_CPU_DESCRIPTOR_HANDLE{rtvHeap_->GetCPUDescriptorHandleForHeapStart(),
-                                           frameIndex_,
-                                           rtvDescriptorSize_};
-  auto dsv = dsvHeap_->GetCPUDescriptorHandleForHeapStart();
+  auto rtv = rtvHeap_->CpuHandle(frameIndex_);
+  auto dsv = dsvHeap_->CpuHandle(0);
 
   commandList_->OMSetRenderTargets(1, &rtv, true, &dsv);
 
   constexpr float clearColor[] = {0.0f, 0.2f, 0.4f, 1.0f};
   commandList_->ClearRenderTargetView(rtv, clearColor, 0, nullptr);
 
-  commandList_->ClearDepthStencilView(dsvHeap_->GetCPUDescriptorHandleForHeapStart(),
-                                      D3D12_CLEAR_FLAG_DEPTH,
-                                      1.f,
-                                      0,
-                                      0,
-                                      nullptr);
+  commandList_
+      ->ClearDepthStencilView(dsvHeap_->CpuHandle(0), D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
+
 
   commandList_->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
   commandList_->IASetVertexBuffers(0, 1, &vbv_);
   commandList_->IASetIndexBuffer(&ibv_);
 
-  // commandList_->DrawIndexedInstanced(indexCount_, 1, 0, 0, 0);
   DrawAllRenderItems();
 
   Transition(renderTargets_[frameIndex_].Get(),

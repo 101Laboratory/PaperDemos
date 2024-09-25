@@ -11,6 +11,7 @@
 #include "camera.h"
 #include "ConstantBuffer.h"
 #include "DefaultBuffer.h"
+#include "DescriptorHeap.h"
 #include "Material.h"
 #include "Model.h"
 #include "Timer.h"
@@ -47,6 +48,7 @@ public:
   void InitializeScene();
 
   void Update();
+  
   void ExecuteCommandList() const;
 
   void Render();
@@ -96,12 +98,11 @@ private:
   std::array<Microsoft::WRL::ComPtr<ID3D12Resource>, s_renderTargetCount> renderTargets_;
   int frameIndex_ = -1;
 
-  UINT rtvDescriptorSize_ = 0;
-  UINT cbvDescriptorSize_ = 0;
+  std::unique_ptr<DescriptorHeap> rtvHeap_;
+  
+  std::unique_ptr<DescriptorHeap> dsvHeap_;
 
-  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap_;
-  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> dsvHeap_;
-  Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> cbvHeap_;
+  std::unique_ptr<DescriptorHeap> cbvHeap_;
 
   Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilBuffer_;
   DXGI_FORMAT depthBufferFormat_ = DXGI_FORMAT_D16_UNORM;
