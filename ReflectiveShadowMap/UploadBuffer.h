@@ -55,11 +55,8 @@ UploadBuffer<T, alignment>::UploadBuffer(ID3D12Device* device, size_t count)
   auto heapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
   auto resDesc = CD3DX12_RESOURCE_DESC::Buffer(elemCount_ * elemPaddedSize_);
 
-  DX::ThrowIfFailed(device->CreateCommittedResource(&heapProp,
-                                                    D3D12_HEAP_FLAG_NONE,
-                                                    &resDesc,
-                                                    D3D12_RESOURCE_STATE_GENERIC_READ,
-                                                    nullptr,
+  DX::ThrowIfFailed(device->CreateCommittedResource(&heapProp, D3D12_HEAP_FLAG_NONE, &resDesc,
+                                                    D3D12_RESOURCE_STATE_GENERIC_READ, nullptr,
                                                     IID_PPV_ARGS(buffer_.GetAddressOf())));
 
   D3D12_RANGE range = {0, 0};  // CPU won't read;
@@ -74,8 +71,7 @@ UploadBuffer<T, alignment>::~UploadBuffer() {
 }
 
 template <typename T, int alignment>
-void UploadBuffer<T, alignment>::LoadBuffer(size_t byteOffset,
-                                            const void* dataBegin,
+void UploadBuffer<T, alignment>::LoadBuffer(size_t byteOffset, const void* dataBegin,
                                             size_t byteSize) const {
   auto* dst = static_cast<UINT8*>(bufBegin_) + byteOffset;
   memcpy(dst, dataBegin, byteSize);

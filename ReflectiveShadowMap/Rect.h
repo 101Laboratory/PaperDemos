@@ -3,8 +3,8 @@
 #include "Model.h"
 
 struct RectXZ {
-  float spanX;
-  float spanZ;
+  float spanX = 1.f;
+  float spanZ = 1.f;
 };
 
 

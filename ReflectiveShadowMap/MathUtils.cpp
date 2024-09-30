@@ -26,6 +26,24 @@ XMFLOAT4 ToXMFloat4(FXMVECTOR v) {
   return ret;
 }
 
+XMMATRIX ToXMMatrix(XMFLOAT4X4 m) {
+  XMMATRIX mat = XMLoadFloat4x4(&m);
+  return mat;
+}
+
+XMFLOAT4X4 ToXMFloat4x4(XMMATRIX m) {
+  XMFLOAT4X4 mat;
+  XMStoreFloat4x4(&mat, m);
+  return mat;
+}
+
+XMFLOAT4X4 Float4x4Inverse(XMFLOAT4X4 m) {
+  auto mat = ToXMMatrix(m);
+  auto det = XMMatrixDeterminant(mat);
+  auto inv = XMMatrixInverse(&det, mat);
+  return ToXMFloat4x4(inv);
+}
+
 double Clamp(double x, double lo, double hi) {
   return x > lo ? (x < hi ? x : hi) : lo;
 }

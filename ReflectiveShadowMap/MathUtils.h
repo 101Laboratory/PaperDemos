@@ -12,6 +12,11 @@ DirectX::XMFLOAT3 ToXMFloat3(DirectX::FXMVECTOR v);
 
 DirectX::XMFLOAT4 ToXMFloat4(DirectX::FXMVECTOR v);
 
+DirectX::XMMATRIX ToXMMatrix(DirectX::XMFLOAT4X4 m);
+
+DirectX::XMFLOAT4X4 ToXMFloat4x4(DirectX::XMMATRIX m);
+
+
 double Clamp(double x, double lo, double hi);
 
 int Clamp(int x, int lo, int hi);
@@ -26,3 +31,4 @@ std::tuple<float, float, float> ToSpherical(float x, float y, float z);
 
 DirectX::XMFLOAT4X4 Float4x4Identity();
 
+DirectX::XMFLOAT4X4 Float4x4Inverse(DirectX::XMFLOAT4X4 m);

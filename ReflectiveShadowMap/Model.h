@@ -8,8 +8,6 @@ struct Vertex {
   DirectX::XMFLOAT3 pos;
   float padding0;
   DirectX::XMFLOAT3 normal;
-  float padding1;
-  DirectX::XMFLOAT4 color;
 };
 
 class ObjModel {
