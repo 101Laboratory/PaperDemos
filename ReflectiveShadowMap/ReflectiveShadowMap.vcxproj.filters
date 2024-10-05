@@ -68,9 +68,6 @@
     <ClInclude Include="Rect.h">
       <Filter>Render</Filter>
     </ClInclude>
-    <ClInclude Include="ReflectiveShadowMap.h">
-      <Filter>Render</Filter>
-    </ClInclude>
     <ClInclude Include="UploadBuffer.h">
       <Filter>Render</Filter>
     </ClInclude>
@@ -83,7 +80,7 @@
     <ClInclude Include="DescriptorHeap.h">
       <Filter>Render</Filter>
     </ClInclude>
-    <ClInclude Include="Sampler.h">
+    <ClInclude Include="RenderTarget.h">
       <Filter>Render</Filter>
     </ClInclude>
   </ItemGroup>
@@ -133,13 +130,10 @@
     <ClCompile Include="Rect.cpp">
       <Filter>Render</Filter>
     </ClCompile>
-    <ClCompile Include="ReflectiveShadowMap.cpp">
-      <Filter>Render</Filter>
-    </ClCompile>
     <ClCompile Include="DescriptorHeap.cpp">
       <Filter>Render</Filter>
     </ClCompile>
-    <ClCompile Include="Sampler.cpp">
+    <ClCompile Include="RenderTarget.cpp">
       <Filter>Render</Filter>
     </ClCompile>
   </ItemGroup>

@@ -9,8 +9,9 @@ using namespace DirectX;
 
 D3DApp::D3DApp(std::wstring name, int viewportWidth, int viewportHeight)
     : name_{std::move(name)},
-      viewport_{0.0f, 0.0f, static_cast<float>(viewportWidth), static_cast<float>(viewportHeight)},
-      scissorRect_{0, 0, static_cast<LONG>(viewportWidth), static_cast<LONG>(viewportHeight)} {
+      viewport_{
+          MakeViewport(static_cast<float>(viewportWidth), static_cast<float>(viewportHeight))},
+      scissorRect_{MakeScissorRect(viewportWidth, viewportHeight)} {
 
   camera_ = std::make_unique<Camera>(
       XMFLOAT3{0.0f, 2.0f, -10.0f}, XMFLOAT3{0.0f, 0.0f, 1.0f},
@@ -62,7 +63,7 @@ void D3DApp::Initialize(HWND window) {
     frameIndex_ = swapChain_->GetCurrentBackBufferIndex();
   }
 
-  rtvHeap_ = MakeRtvHeap(device_.Get(), s_renderTargetCount + texCount_);
+  rtvHeap_ = MakeRtvHeap(device_.Get(), 6);
   dsvHeap_ = MakeDsvHeap(device_.Get(), 2);
   cbvSrvHeap_ = MakeCbvSrvUavHeap(device_.Get(), 9);
 
@@ -244,12 +245,27 @@ void D3DApp::Initialize(HWND window) {
     WaitForGpuCompletion();
   }
 
+
+  // Prepare RSM
+  {
+    // RSM rtv and srv
+    rsmDepth_ = std::make_unique<Rsm>(device_.Get(), rtvHeap_->CpuHandle(s_rsmRtvStartIndex),
+                                      cbvSrvHeap_->CpuHandle(s_rsmSrvStartIndex),
+                                      XMFLOAT4{1.f, 1.f, 1.f, 1.f});
+    rsmNormal_ = std::make_unique<Rsm>(device_.Get(), rtvHeap_->CpuHandle(s_rsmRtvStartIndex + 1),
+                                       cbvSrvHeap_->CpuHandle(s_rsmSrvStartIndex + 1));
+    rsmFlux_ = std::make_unique<Rsm>(device_.Get(), rtvHeap_->CpuHandle(s_rsmRtvStartIndex + 2),
+                                     cbvSrvHeap_->CpuHandle(s_rsmSrvStartIndex + 2));
+    rsmWorldPos_ = std::make_unique<Rsm>(device_.Get(), rtvHeap_->CpuHandle(s_rsmRtvStartIndex + 3),
+                                         cbvSrvHeap_->CpuHandle(s_rsmSrvStartIndex + 3));
+  }
+
   // RSM depth stencil buffer
   {
     auto depthBufferHeapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
     auto depthBufferResDesc = CD3DX12_RESOURCE_DESC::Tex2D(
-        depthBufferFormat_, static_cast<UINT64>(texSize_), static_cast<UINT>(texSize_), 1, 0, 1, 0,
-        D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
+        depthBufferFormat_, static_cast<UINT64>(s_rsmSize), static_cast<UINT>(s_rsmSize), 1, 0, 1,
+        0, D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL);
     auto clearVal = CD3DX12_CLEAR_VALUE(depthBufferFormat_, 1.f, 0);
 
     ThrowIfFailed(device_->CreateCommittedResource(
@@ -265,58 +281,7 @@ void D3DApp::Initialize(HWND window) {
     dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
 
     device_->CreateDepthStencilView(shadowDepthBuffer_.Get(), &dsvDesc,
-                                    dsvHeap_->CpuHandle(rsmDsvStartIndex_));
-  }
-  // RSM textures
-  rsmTex_.resize(texCount_);
-  rsmViewport_ = CD3DX12_VIEWPORT(0.f, 0.f, static_cast<FLOAT>(texSize_),
-                                  static_cast<FLOAT>(texSize_));
-  rsmRect_ = CD3DX12_RECT{0, 0, texSize_, texSize_};
-  {
-    auto heapProp = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_DEFAULT);
-    auto resDesc = CD3DX12_RESOURCE_DESC::Tex2D(DXGI_FORMAT_R32G32B32A32_FLOAT, texSize_, texSize_,
-                                                1, 1, 1, 0,
-                                                D3D12_RESOURCE_FLAG_ALLOW_RENDER_TARGET);
-
-    FLOAT blackColor[] = {0.f, 0.f, 0.f, 1.f};
-    auto clearBlack = CD3DX12_CLEAR_VALUE(DXGI_FORMAT_R32G32B32A32_FLOAT, blackColor);
-    FLOAT whiteColor[] = {1.f, 1.f, 1.f, 1.f};
-    auto clearWhite = CD3DX12_CLEAR_VALUE(DXGI_FORMAT_R32G32B32A32_FLOAT, whiteColor);
-
-    for (int i = 0; i < texCount_; ++i) {
-      ThrowIfFailed(device_->CreateCommittedResource(
-          &heapProp, D3D12_HEAP_FLAG_ALLOW_ALL_BUFFERS_AND_TEXTURES, &resDesc,
-          D3D12_RESOURCE_STATE_GENERIC_READ, &(i == 0 ? clearWhite : clearBlack),
-          IID_PPV_ARGS(rsmTex_[i].ReleaseAndGetAddressOf())));
-    }
-  }
-  // RSM RTV
-  {
-    D3D12_RENDER_TARGET_VIEW_DESC rtvDesc{};
-    rtvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-    rtvDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2D;
-    rtvDesc.Texture2D.PlaneSlice = 0;
-    rtvDesc.Texture2D.MipSlice = 0;
-    for (int i = 0; i < texCount_; ++i) {
-      device_->CreateRenderTargetView(rsmTex_[i].Get(), &rtvDesc,
-                                      rtvHeap_->CpuHandle(rsmRtvStartIndex_ + i));
-    }
-  }
-  // RSM SRV
-  {
-    D3D12_SHADER_RESOURCE_VIEW_DESC srvDesc{};
-    srvDesc.Format = DXGI_FORMAT_R32G32B32A32_FLOAT;
-    srvDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
-    srvDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
-    srvDesc.Texture2D.MostDetailedMip = 0;
-    srvDesc.Texture2D.MipLevels = 1;
-    srvDesc.Texture2D.PlaneSlice = 0;
-    srvDesc.Texture2D.ResourceMinLODClamp = 0.f;
-
-    for (int i = 0; i < texCount_; ++i) {
-      device_->CreateShaderResourceView(rsmTex_[i].Get(), &srvDesc,
-                                        cbvSrvHeap_->CpuHandle(i + rsmSrvStartIndex_));
-    }
+                                    dsvHeap_->CpuHandle(s_rsmDsvStartIndex));
   }
 
   InitializeScene();
@@ -535,7 +500,7 @@ void D3DApp::Update() {
   cbo.lightPos = directionalLight_.pos;
   cbo.width = viewport_.Width;
   cbo.height = viewport_.Height;
-  cbo.rsmSize = static_cast<float>(texSize_);
+  cbo.rsmSize = static_cast<float>(s_rsmSize);
   cbo.timeElapsed = totalTimeElapsed_;
   passCBuffer_->LoadElement(0, cbo);
 }
@@ -567,10 +532,10 @@ void D3DApp::PopulateCommandListFirstPass() {
 
   commandList_->SetPipelineState(pipelineStatePass1_.Get());
 
-  for (int i = 0; i < texCount_; ++i) {
-    Transition(rsmTex_[i].Get(), D3D12_RESOURCE_STATE_GENERIC_READ,
-               D3D12_RESOURCE_STATE_RENDER_TARGET);
-  }
+  rsmDepth_->TransitionTo(commandList_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+  rsmNormal_->TransitionTo(commandList_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+  rsmFlux_->TransitionTo(commandList_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
+  rsmWorldPos_->TransitionTo(commandList_.Get(), D3D12_RESOURCE_STATE_RENDER_TARGET);
 
   commandList_->SetGraphicsRootSignature(rootSignature_.Get());
 
@@ -579,23 +544,24 @@ void D3DApp::PopulateCommandListFirstPass() {
 
   commandList_->SetGraphicsRootDescriptorTable(0, cbvSrvHeap_->GpuHandle(0));
 
-  commandList_->RSSetViewports(1, &rsmViewport_);
-  commandList_->RSSetScissorRects(1, &rsmRect_);
+  auto viewport = MakeViewport(s_rsmSize, s_rsmSize);
+  commandList_->RSSetViewports(1, &viewport);
 
-  auto rtv = rtvHeap_->CpuHandle(rsmRtvStartIndex_);
-  auto dsv = dsvHeap_->CpuHandle(rsmDsvStartIndex_);
+  auto rect = MakeScissorRect(s_rsmSize, s_rsmSize);
+  commandList_->RSSetScissorRects(1, &rect);
 
-  commandList_->OMSetRenderTargets(4, &rtv, true, &dsv);
+  auto dsv = dsvHeap_->CpuHandle(s_rsmDsvStartIndex);
 
-  constexpr float black[] = {0.f, 0.f, 0.f, 1.f};
-  constexpr float white[] = {1.f, 1.f, 1.f, 1.f};
-  commandList_->ClearRenderTargetView(rtvHeap_->CpuHandle(rsmRtvStartIndex_), white, 0, nullptr);
-  commandList_->ClearRenderTargetView(rtvHeap_->CpuHandle(rsmRtvStartIndex_ + 1), black, 0,
-                                      nullptr);
-  commandList_->ClearRenderTargetView(rtvHeap_->CpuHandle(rsmRtvStartIndex_ + 2), black, 0,
-                                      nullptr);
-  commandList_->ClearRenderTargetView(rtvHeap_->CpuHandle(rsmRtvStartIndex_ + 3), black, 0,
-                                      nullptr);
+  D3D12_CPU_DESCRIPTOR_HANDLE rtvs[] = {rsmDepth_->Rtv(), rsmNormal_->Rtv(), rsmFlux_->Rtv(),
+                                        rsmWorldPos_->Rtv()};
+
+  commandList_->OMSetRenderTargets(4, rtvs, false, &dsv);
+
+
+  rsmDepth_->Clear(commandList_.Get());
+  rsmNormal_->Clear(commandList_.Get());
+  rsmFlux_->Clear(commandList_.Get());
+  rsmWorldPos_->Clear(commandList_.Get());
 
   commandList_->ClearDepthStencilView(dsv, D3D12_CLEAR_FLAG_DEPTH, 1.f, 0, 0, nullptr);
 
@@ -606,6 +572,12 @@ void D3DApp::PopulateCommandListFirstPass() {
 
   DrawAllRenderItems();
 
+
+  rsmDepth_->TransitionTo(commandList_.Get(), D3D12_RESOURCE_STATE_GENERIC_READ);
+  rsmFlux_->TransitionTo(commandList_.Get(), D3D12_RESOURCE_STATE_GENERIC_READ);
+  rsmNormal_->TransitionTo(commandList_.Get(), D3D12_RESOURCE_STATE_GENERIC_READ);
+  rsmWorldPos_->TransitionTo(commandList_.Get(), D3D12_RESOURCE_STATE_GENERIC_READ);
+
   ThrowIfFailed(commandList_->Close());
 }
 
@@ -615,19 +587,14 @@ void D3DApp::PopulateCommandListSecondPass() {
 
   commandList_->SetPipelineState(pipelineStatePass2_.Get());
 
-
-  for (int i = 0; i < texCount_; ++i) {
-    Transition(rsmTex_[i].Get(), D3D12_RESOURCE_STATE_RENDER_TARGET,
-               D3D12_RESOURCE_STATE_GENERIC_READ);
-  }
-
   commandList_->SetGraphicsRootSignature(rootSignature_.Get());
 
   ID3D12DescriptorHeap* heaps[] = {cbvSrvHeap_->Heap()};
   commandList_->SetDescriptorHeaps(_countof(heaps), heaps);
 
   commandList_->SetGraphicsRootDescriptorTable(0, cbvSrvHeap_->GpuHandle(0));
-  commandList_->SetGraphicsRootDescriptorTable(2, cbvSrvHeap_->GpuHandle(rsmSrvStartIndex_));
+
+  commandList_->SetGraphicsRootDescriptorTable(2, cbvSrvHeap_->GpuHandle(s_rsmSrvStartIndex));
 
   commandList_->RSSetViewports(1, &viewport_);
   commandList_->RSSetScissorRects(1, &scissorRect_);
@@ -661,7 +628,6 @@ void D3DApp::PopulateCommandListSecondPass() {
 
 void D3DApp::DrawAllRenderItems() {
   for (const auto& ri : renderItems_) {
-    // Model constant modelCbv
     commandList_->SetGraphicsRootDescriptorTable(1, ri.modelCbv);
     commandList_->DrawIndexedInstanced(ri.indexCount, 1, ri.startIndexLocation,
                                        ri.baseVertexLocation, 0);
@@ -714,4 +680,12 @@ float D3DApp::GetViewportWidth() const {
 
 float D3DApp::GetViewportHeight() const {
   return viewport_.Height;
+}
+
+CD3DX12_VIEWPORT MakeViewport(float w, float h) {
+  return CD3DX12_VIEWPORT{0.f, 0.f, w, h};
+}
+
+CD3DX12_RECT MakeScissorRect(LONG w, LONG h) {
+  return CD3DX12_RECT{0, 0, w, h};
 }

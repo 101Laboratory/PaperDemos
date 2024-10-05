@@ -9,6 +9,8 @@
 
 Using DX12 + Win32.
 
+When taking samples on RSM, I use neighboring n x n texels for simplicity. Also screen space interpolation is not implemented.
+
 Camera views:
 ![Result](Resources/ReflectiveShadowMap/img/result_combined.jpg)
 

@@ -4,7 +4,7 @@
 using Milliseconds = std::chrono::milliseconds;
 using Seconds = std::chrono::seconds;
 
-template <typename Duration = std::chrono::milliseconds>
+template<typename Duration = std::chrono::milliseconds>
 class Timer {
 public:
   using Clock = std::chrono::high_resolution_clock;
@@ -30,7 +30,7 @@ private:
   Duration timeElapsed_ = Duration::zero();
 };
 
-template <typename Duration>
+template<typename Duration>
 void Timer<Duration>::Start() {
   if (isRunning_)
     return;
@@ -39,7 +39,7 @@ void Timer<Duration>::Start() {
   start_ = Now();
 }
 
-template <typename Duration>
+template<typename Duration>
 void Timer<Duration>::Pause() {
   if (!isRunning_)
     return;
@@ -48,29 +48,29 @@ void Timer<Duration>::Pause() {
   timeElapsed_ += std::chrono::duration_cast<Duration>(Now() - start_);
 }
 
-template <typename Duration>
+template<typename Duration>
 Duration Timer<Duration>::TimeElapsed() const {
   return timeElapsed_ +
          (isRunning_ ? std::chrono::duration_cast<Duration>(Now() - start_) : Duration::zero());
 }
 
-template <typename Duration>
+template<typename Duration>
 bool Timer<Duration>::IsRunning() const {
   return isRunning_;
 }
 
-template <typename Duration>
+template<typename Duration>
 void Timer<Duration>::Clear() {
   timeElapsed_ = Duration::zero();
 }
 
-template <typename Duration>
+template<typename Duration>
 void Timer<Duration>::Reset() {
   isRunning_ = false;
   timeElapsed_ = Duration::zero();
 }
 
-template <typename Rep, typename Period>
+template<typename Rep, typename Period>
 double ToSeconds(std::chrono::duration<Rep, Period> duration) {
   return std::chrono::duration_cast<std::chrono::duration<double, std::ratio<1>>>(duration).count();
 }

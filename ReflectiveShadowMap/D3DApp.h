@@ -15,6 +15,7 @@
 #include "DirectionalLight.h"
 #include "Material.h"
 #include "Model.h"
+#include "RenderTarget.h"
 #include "Timer.h"
 
 struct PassConstant {
@@ -126,14 +127,14 @@ private:
   // [4]: RSM flux texture (write)
   // [5]: RSM world pos texture (write)
   std::unique_ptr<DescriptorHeap> rtvHeap_;
-  int rsmRtvStartIndex_ = 2;
+  static constexpr int s_rsmRtvStartIndex = 2;
 
 
   // Depth stencil views
   // [0]: depth buffer for final image
   // [1]: depth buffer for RSM
   std::unique_ptr<DescriptorHeap> dsvHeap_;
-  int rsmDsvStartIndex_ = 1;
+  static constexpr int s_rsmDsvStartIndex = 1;
 
   Microsoft::WRL::ComPtr<ID3D12Resource> depthStencilBuffer_;
   DXGI_FORMAT depthBufferFormat_ = DXGI_FORMAT_D16_UNORM;
@@ -152,7 +153,7 @@ private:
   D3D12_VERTEX_BUFFER_VIEW vbv_{};
 
   std::unique_ptr<DefaultBuffer> iBuffer_;
-  D3D12_INDEX_BUFFER_VIEW ibv_;
+  D3D12_INDEX_BUFFER_VIEW ibv_{};
 
   // Constant buffer views and shader resource views
   // [0] cbv: pass constant
@@ -162,7 +163,7 @@ private:
   // [7] srv: RSM flux texture (read)
   // [8] srv: RSM world pos texture (read)
   std::unique_ptr<DescriptorHeap> cbvSrvHeap_;
-  int rsmSrvStartIndex_ = 5;
+  static constexpr int s_rsmSrvStartIndex = 5;
 
   std::unique_ptr<ConstantBuffer<PassConstant>> passCBuffer_;
   std::unique_ptr<ConstantBuffer<ModelConstant>> modelCBuffer_;
@@ -172,12 +173,15 @@ private:
   DirectionalLight directionalLight_ = MakeSceneDefaultDirectionalLight();
 
   // Reflective shadow map
-  std::vector<Microsoft::WRL::ComPtr<ID3D12Resource>> rsmTex_;
+  static constexpr size_t s_rsmSize = 512;
+  using Rsm = RenderTarget<s_rsmSize, s_rsmSize, DXGI_FORMAT_R32G32B32A32_FLOAT>;
+
+  std::unique_ptr<Rsm> rsmDepth_;
+  std::unique_ptr<Rsm> rsmNormal_;
+  std::unique_ptr<Rsm> rsmFlux_;
+  std::unique_ptr<Rsm> rsmWorldPos_;
+
   Microsoft::WRL::ComPtr<ID3D12Resource> shadowDepthBuffer_;
-  int texCount_ = 4;
-  int texSize_ = 512;
-  CD3DX12_VIEWPORT rsmViewport_;
-  CD3DX12_RECT rsmRect_;
 
 
   // Synchronization
@@ -195,3 +199,7 @@ private:
   void UpdateScene();
   void DrawAllRenderItems();
 };
+
+CD3DX12_VIEWPORT MakeViewport(float w, float h);
+
+CD3DX12_RECT MakeScissorRect(LONG w, LONG h);

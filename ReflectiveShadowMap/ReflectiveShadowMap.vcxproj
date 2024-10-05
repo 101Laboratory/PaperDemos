@@ -158,8 +158,7 @@
     <ClInclude Include="Model.h" />
     <ClInclude Include="OrbitCamera.h" />
     <ClInclude Include="Rect.h" />
-    <ClInclude Include="ReflectiveShadowMap.h" />
-    <ClInclude Include="Sampler.h" />
+    <ClInclude Include="RenderTarget.h" />
     <ClInclude Include="Timer.h" />
     <ClInclude Include="UploadBuffer.h" />
     <ClInclude Include="Win32InputHandler.h" />
@@ -179,8 +178,7 @@
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="OrbitCamera.cpp" />
     <ClCompile Include="Rect.cpp" />
-    <ClCompile Include="ReflectiveShadowMap.cpp" />
-    <ClCompile Include="Sampler.cpp" />
+    <ClCompile Include="RenderTarget.cpp" />
     <ClCompile Include="Timer.cpp" />
     <ClCompile Include="Win32InputHandler.cpp" />
     <ClCompile Include="Win32Window.cpp" />

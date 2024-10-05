@@ -17,7 +17,7 @@ inline int ComputePaddedSize(int size, int alignment) {
   return size + padding;
 }
 
-template <typename T, int alignment = sizeof(T)>
+template<typename T, int alignment = sizeof(T)>
 class UploadBuffer {
 public:
   explicit UploadBuffer(ID3D12Device* device, size_t count);
@@ -47,7 +47,7 @@ private:
   size_t elemCount_ = 0;
 };
 
-template <typename T, int alignment>
+template<typename T, int alignment>
 UploadBuffer<T, alignment>::UploadBuffer(ID3D12Device* device, size_t count)
     : elemPaddedSize_{ComputePaddedSize(sizeof(T), alignment)},
       elemCount_{count} {
@@ -63,28 +63,28 @@ UploadBuffer<T, alignment>::UploadBuffer(ID3D12Device* device, size_t count)
   DX::ThrowIfFailed(buffer_->Map(0, &range, &bufBegin_));
 }
 
-template <typename T, int alignment>
+template<typename T, int alignment>
 UploadBuffer<T, alignment>::~UploadBuffer() {
   D3D12_RANGE range = {0, 0};
   buffer_->Unmap(0, &range);
   bufBegin_ = nullptr;
 }
 
-template <typename T, int alignment>
+template<typename T, int alignment>
 void UploadBuffer<T, alignment>::LoadBuffer(size_t byteOffset, const void* dataBegin,
                                             size_t byteSize) const {
   auto* dst = static_cast<UINT8*>(bufBegin_) + byteOffset;
   memcpy(dst, dataBegin, byteSize);
 }
 
-template <typename T, int alignment>
+template<typename T, int alignment>
 void UploadBuffer<T, alignment>::LoadElement(size_t index, const T& elem) {
   auto* p = static_cast<UINT8*>(bufBegin_);
   p += index * elemPaddedSize_;
   memcpy(p, &elem, sizeof(elem));
 }
 
-template <typename T, int alignment>
+template<typename T, int alignment>
 D3D12_GPU_VIRTUAL_ADDRESS UploadBuffer<T, alignment>::ElementGpuVirtualAddress(size_t index) const {
   return buffer_->GetGPUVirtualAddress() + index * elemPaddedSize_;
 }
