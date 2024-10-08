@@ -117,11 +117,6 @@
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\ReflectiveShadowMap\ReflectiveShadowMap.vcxproj">
-      <Project>{d1ba8a5b-fbc6-4abc-9757-2363a05909b2}</Project>
-    </ProjectReference>
-  </ItemGroup>
-  <ItemGroup>
     <None Include="packages.config" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
